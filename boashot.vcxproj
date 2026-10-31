@@ -127,7 +127,33 @@
     </Link>
   </ItemDefinitionGroup>
 
-  <ItemGroup></ItemGroup>
+  <PropertyGroup>
+    <DxLibDir Condition="'$(DxLibDir)'==''">$(ProjectDir)dependencies\DxLib</DxLibDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(DxLibDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <PreprocessorDefinitions>NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary Condition="'$(Configuration)'=='Debug'">MultiThreadedDebug</RuntimeLibrary>
+      <RuntimeLibrary Condition="'$(Configuration)'=='Release'">MultiThreaded</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <AdditionalLibraryDirectories>$(DxLibDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="src\Main.cpp" />
+    <ClCompile Include="src\Game.cpp" />
+    <ClInclude Include="src\Game.h" />
+  </ItemGroup>
+  <Target Name="CheckDxLib" BeforeTargets="PrepareForBuild" Condition="!Exists('$(DxLibDir)\DxLib.h')">
+    <Error Text="DxLib SDK missing. Run: powershell -ExecutionPolicy Bypass -File scripts\setup-dxlib.ps1" />
+  </Target>
+  <Target Name="CopyNotices" AfterTargets="Build">
+    <Copy SourceFiles="$(DxLibDir)\dxlicense.html" DestinationFolder="$(OutDir)" Condition="Exists('$(DxLibDir)\dxlicense.html')" />
+  </Target>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

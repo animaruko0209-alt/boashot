@@ -1,98 +1,202 @@
 #pragma once
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 namespace boa {
+
+// 座標と半径はピクセル、時間とクールタイムは秒で扱う。
 constexpr float Width = 1280, Height = 720, Top = 110, Bottom = 652;
 constexpr float Pi = 3.14159265f;
+
+constexpr float AbsorbDuration = 2.4f, CooldownRatio = .9f;
+constexpr float MinCharge = 8.f, GrenadeCost = 16.f, BarrierRate = 14.f;
+constexpr float ExplosionRadius = 110.f, ExplosionDuration = .42f;
+constexpr float ParadeCost = 20.f, ParadeDuration = 6.f, TerrainRadius = 94.f;
+constexpr int MaxLevel = 10;
+
 struct Vec {
     float x = 0, y = 0;
+
     Vec operator+(Vec b) const { return {x + b.x, y + b.y}; }
     Vec operator-(Vec b) const { return {x - b.x, y - b.y}; }
     Vec operator*(float s) const { return {x * s, y * s}; }
 };
+
 inline float length(Vec v) { return std::sqrt(v.x * v.x + v.y * v.y); }
-inline Vec unit(Vec v) { float d = length(v); return d > .001f ? v * (1 / d) : Vec{-1, 0}; }
+
+inline Vec unit(Vec v) {
+    float d = length(v);
+    return d > .001f ? v * (1 / d) : Vec{-1, 0};
+}
+
 inline float clamp(float v, float a, float b) { return std::max(a, std::min(v, b)); }
-enum class Branch { Base, Attack, Absorb, Defense };
-enum class Phase { Title, Playing, Paused, Clear, GameOver, Hangar };
-enum class EnemyKind { Scout, Heavy, Rock, Boss };
-struct Profile {
-    int xp = 0, stage = 1, rank = 0;
-    Branch branch = Branch::Base;
-    bool toggleAbsorb = false;
+
+enum class Phase {
+    Title,
+    Playing,
+    Paused,
+    Clear,
+    GameOver
 };
+
+enum class Action {
+    Charge,
+    Grenade,
+    Barrier
+};
+
+enum class EnemyKind {
+    Scout,
+    Heavy,
+    Rock,
+    Gabu,
+    Boss
+};
+
+enum class Gimmick {
+    None,
+    Gravity,
+    Terrain,
+    Meteors,
+    Crossfire
+};
+
+struct Profile {
+    // 次に出撃するステージ。描画には出撃時に確定した Game::stage を使う。
+    int stage = 1;
+};
+
 struct Input {
     Vec move;
+    std::optional<Action> selection;
+
+    // キーを押したフレームと離したフレームだけ、それぞれのフラグを立てる。
     bool absorbPress = false, absorbRelease = false;
-    bool firePress = false, fireRelease = false;
-    bool chargePress = false, chargeRelease = false;
-    bool barrier = false;
+    bool actionPress = false, actionRelease = false, skillPress = false;
 };
+
 struct Bullet {
     Vec p, velocity;
-    bool rock = false, alive = true, siphoning = false;
-    float energy = 6, maxEnergy = 6, damage = 14, radius = 7;
+    bool rock = false, alive = true, crossfire = false;
+    float energy = 6, damage = 14, radius = 7;
 };
+
 struct Shot {
     Vec p, previous;
-    float damage = 5, radius = 4, speed = 850;
-    bool charged = false, alive = true;
+    float damage = 0, radius = 4, speed = 850, remainingRange = 800;
+    Action kind = Action::Charge;
+    bool alive = true;
+
+    // 貫通弾が同じ敵に次のフレームでも重なった場合の二重ヒットを防ぐ。
     std::vector<int> hit;
 };
+
 struct Enemy {
     int id = 0;
     EnemyKind kind = EnemyKind::Scout;
     Vec p;
     float hp = 20, maxHp = 20, age = 0, nextShot = 1.25f, anchorY = 0;
     bool alive = true;
+
+    bool absorbingShots() const;
 };
-struct Particle { Vec p, velocity; float life = 0, fullLife = 1; int kind = 0; };
-struct Stats { int kills = 0, absorbed = 0; float energyGained = 0, biggestCharge = 0; };
+
+struct Wreck {
+    Vec p;
+    bool alive = true;
+};
+
+struct Explosion {
+    Vec p;
+    float life = ExplosionDuration;
+};
+
+struct Particle {
+    Vec p, velocity;
+    float life = 0, fullLife = 1;
+    int kind = 0;
+};
+
+struct Stats {
+    int kills = 0, absorbed = 0;
+    float energyGained = 0, biggestCharge = 0;
+};
 
 class Game {
 public:
     Profile profile;
     Phase phase = Phase::Title;
+    Action selected = Action::Charge;
+
     Vec player{170, 380};
     float hp = 100, energy = 35, charge = 0, clock = 0, invulnerable = 0;
-    float fireClock = 0, shake = 0, flash = 0, clearDelay = -1;
-    bool absorbing = false, firing = false, charging = false, barrierActive = false, bossSpawned = false;
-    int wave = 0, nextId = 1;
+    float shake = 0, flash = 0, clearDelay = -1;
+
+    float absorbTime = 0, absorbCooldown = 0, absorbCooldownTotal = 0, onParadeTime = 0;
+    bool absorbing = false, charging = false, barrierActive = false,
+        bossSpawned = false, skillUnlocked = false;
+
+    int wave = 0, nextId = 1, stage = 1, level = 1;
+    float levelXp = 0;
     Stats stats;
+
     std::vector<Bullet> bullets;
     std::vector<Shot> shots;
     std::vector<Enemy> enemies;
     std::vector<Particle> particles;
+    std::vector<Wreck> wrecks;
+    std::vector<Explosion> explosions;
 
-    float capacity() const { return 120.f + profile.rank * 20.f; }
-    float maxHp() const { return profile.branch == Branch::Defense ? 130.f : 100.f; }
-    float range() const { return profile.branch == Branch::Absorb ? 360.f : 280.f; }
-    float halfAngle() const { return profile.branch == Branch::Absorb ? .82f : .65f; }
-    float chargeMultiplier() const { return profile.branch == Branch::Attack ? 1.4f : profile.branch == Branch::Absorb ? .85f : 1.f; }
+    float capacity() const { return 120.f + (level - 1) * 20.f; }
+    float maxHp() const { return 100.f + (level - 1) * 8.f; }
+    float xpToNextLevel() const { return level < MaxLevel ? 45.f + (level - 1) * 20.f : 0.f; }
+
+    float range() const { return onParadeTime > 0 ? 420.f : 280.f; }
+    float halfAngle() const { return onParadeTime > 0 ? .95f : .65f; }
+
     float bossAt() const { return 47.f; }
+    Gimmick gimmick() const;
+    Gimmick activeGimmick() const;
+    Vec hazardPosition() const;
+
     bool inCone(Vec p) const;
+
     void start();
-    void cancelCharge();
     void stopActions();
-    void setToggle(bool toggle);
-    bool evolve(Branch branch);
-    bool upgrade();
     void update(float dt, const Input& input);
+    void spawnEnemy(EnemyKind kind, Vec position);
+    void enemyFire(Enemy& enemy);
+
+private:
+    uint32_t randomState = 0xB0A501u;
+    float nextHazard = 0;
+
+    float random();
+    void cancelCharge();
+    void endAbsorb();
+    void addLevelXp(float amount);
+    void gainEnergy(float amount);
+    bool spendEnergy(float amount);
+
     void controls(const Input& input);
+    void launchCharge();
+    void launchGrenade();
     void updateBullets(float dt);
     void updateWeapons(float dt);
     void updateEnemies(float dt);
+    void updateWrecks(float dt);
+    void updateGimmick();
     void spawnWave();
-    void spawnEnemy(EnemyKind kind, Vec position);
-    void enemyFire(Enemy& enemy);
+
+    void explode(Vec p, float damage);
+    void damageEnemy(Enemy& enemy, float damage, int effect);
     void burst(Vec p, int kind, int count);
     void hurt(float damage);
     void complete();
-private:
-    uint32_t randomState = 0xB0A501u;
-    float random();
 };
-}
+
+} // namespace boa

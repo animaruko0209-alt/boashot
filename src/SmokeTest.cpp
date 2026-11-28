@@ -18,98 +18,102 @@ bool smokeCapture(const Renderer& renderer, const Game& g, const wchar_t* file) 
 } // namespace
 
 // 各場面の開始状態を固定し、1/60秒刻みで入力を再現して画面を保存する。
-bool Application::runSmoke() const {
-    Game scenario;
-    if (!smokeCapture(renderer, scenario, L"smoke-title.png"))
+bool Application::runSmoke() {
+    if (!smokeCapture(renderer, game, L"smoke-title.png"))
         return false;
 
-    scenario.start();
-    scenario.clock = 10.f;
-    scenario.spawnEnemy(EnemyKind::Gabu, {660, 400});
-    scenario.wrecks.push_back({scenario.player + Vec{90, 0}});
+    game.start();
+    game.clock = 10.f;
+    game.spawnEnemy(EnemyKind::Gabu, {660, 400});
+    game.wrecks.push_back({game.player + Vec{90, 0}});
     for (int i = 0; i < 12; ++i) {
         Bullet bullet;
-        bullet.p = scenario.player + Vec{120.f + 30.f * i, (i % 3 - 1) * 35.f};
+        bullet.p = game.player + Vec{120.f + 30.f * i, (i % 3 - 1) * 35.f};
         bullet.velocity = {-130, 0};
-        scenario.bullets.push_back(bullet);
+        game.bullets.push_back(bullet);
     }
 
-    Input input;
-    input.absorbPress = true;
-    scenario.update(1.f / 60.f, input);
-    if (!scenario.absorbing || scenario.stats.absorbed == 0 || !smokeCapture(renderer, scenario, L"smoke-absorb.png"))
+    // DxLibのボタン状態を模擬し、通常プレイと同じ入力変換を通す。
+    game.update(1.f / 60.f, readCombatInput(MOUSE_INPUT_RIGHT | MOUSE_INPUT_LEFT, 0));
+    if (!game.absorbing || game.stats.absorbed == 0 ||
+        game.shots.empty() || game.shots.front().kind != ShotKind::Normal ||
+        !smokeCapture(renderer, game, L"smoke-absorb.png"))
         return false;
 
     for (int i = 0; i < 60; ++i)
-        scenario.update(1.f / 60.f, {});
-    input = {};
-    input.absorbRelease = true;
-    scenario.update(1.f / 60.f, input);
-    if (scenario.absorbCooldown <= 0 || !smokeCapture(renderer, scenario, L"smoke-cooldown.png"))
+        game.update(1.f / 60.f, {});
+    previousMouseButtons = MOUSE_INPUT_RIGHT;
+    game.update(1.f / 60.f, readCombatInput(0, 0));
+    previousMouseButtons = 0;
+    if (game.absorbCooldown <= 0 || !smokeCapture(renderer, game, L"smoke-cooldown.png"))
         return false;
 
-    input = {};
-    input.actionPress = true;
-    scenario.update(1.f / 60.f, input);
+    keys[KEY_INPUT_SPACE] = 1;
+    game.update(1.f / 60.f, readCombatInput(0, 0));
     for (int i = 0; i < 47; ++i)
-        scenario.update(1.f / 60.f, {});
-    if (scenario.charge < MinCharge || !smokeCapture(renderer, scenario, L"smoke-charge.png"))
+        game.update(1.f / 60.f, {});
+    if (game.charge < MinCharge || !smokeCapture(renderer, game, L"smoke-charge.png"))
         return false;
 
-    scenario.profile.stage = 2;
-    scenario.start();
-    scenario.clock = 15.f;
-    scenario.wrecks.push_back({scenario.player + Vec{100, 0}});
-    input = {};
-    input.absorbPress = true;
-    scenario.update(1.f / 60.f, input);
-    input = {};
-    input.skillPress = true;
-    scenario.update(1.f / 60.f, input);
-    if (scenario.onParadeTime <= 0 || !smokeCapture(renderer, scenario, L"smoke-parade.png"))
+    previousKeys[KEY_INPUT_SPACE] = 1;
+    keys[KEY_INPUT_SPACE] = 0;
+    game.update(1.f / 60.f, readCombatInput(0, 0));
+    previousKeys[KEY_INPUT_SPACE] = 0;
+    if (std::none_of(game.shots.begin(), game.shots.end(),
+            [](const Shot& shot) { return shot.kind == ShotKind::Charge; }))
         return false;
 
-    scenario.profile.stage = 1;
-    scenario.start();
-    scenario.clock = 20.f;
-    scenario.spawnEnemy(EnemyKind::Scout, scenario.player + Vec{175, 0});
-    input = {};
-    input.selection = Action::Grenade;
-    input.actionPress = true;
-    scenario.update(1.f / 60.f, input);
-    for (int frame = 0; frame < 60 && scenario.explosions.empty(); ++frame)
-        scenario.update(1.f / 60.f, {});
-    if (scenario.explosions.empty() || !smokeCapture(renderer, scenario, L"smoke-grenade.png"))
+    game.profile.stage = 2;
+    game.start();
+    game.clock = 15.f;
+    game.wrecks.push_back({game.player + Vec{100, 0}});
+    game.update(1.f / 60.f, readCombatInput(MOUSE_INPUT_RIGHT, 0));
+    previousMouseButtons = MOUSE_INPUT_RIGHT;
+    keys[KEY_INPUT_I] = 1;
+    game.update(1.f / 60.f, readCombatInput(MOUSE_INPUT_RIGHT, 0));
+    keys[KEY_INPUT_I] = 0;
+    previousMouseButtons = 0;
+    if (game.onParadeTime <= 0 || !smokeCapture(renderer, game, L"smoke-parade.png"))
         return false;
 
-    scenario.start();
-    scenario.clock = scenario.bossAt() + 1.f;
-    scenario.bossSpawned = true;
-    scenario.spawnEnemy(EnemyKind::Boss, {1080, 380});
+    game.profile.stage = 1;
+    game.start();
+    game.clock = 20.f;
+    game.spawnEnemy(EnemyKind::Scout, game.player + Vec{175, 0});
+    keys[KEY_INPUT_SPACE] = 1;
+    game.update(1.f / 60.f, readCombatInput(0, 1));
+    keys[KEY_INPUT_SPACE] = 0;
+    for (int frame = 0; frame < 60 && game.explosions.empty(); ++frame)
+        game.update(1.f / 60.f, {});
+    if (game.explosions.empty() || !smokeCapture(renderer, game, L"smoke-grenade.png"))
+        return false;
+
+    game.start();
+    game.clock = game.bossAt() + 1.f;
+    game.bossSpawned = true;
+    game.spawnEnemy(EnemyKind::Boss, {1080, 380});
     for (int i = 0; i < 4; ++i) {
-        scenario.enemies.front().age = i * .65f;
-        scenario.enemyFire(scenario.enemies.front());
+        game.enemies.front().age = i * .65f;
+        game.enemyFire(game.enemies.front());
     }
-    input = {};
-    input.selection = Action::Barrier;
-    input.actionPress = true;
-    scenario.update(1.f / 60.f, input);
-    if (!scenario.barrierActive || !smokeCapture(renderer, scenario, L"smoke-boss.png"))
+    keys[KEY_INPUT_SPACE] = 1;
+    game.update(1.f / 60.f, readCombatInput(0, -1));
+    if (!game.barrierActive || !smokeCapture(renderer, game, L"smoke-boss.png"))
         return false;
 
     // とどめの弾を置き、通常の撃破処理を経てクリア画面へ遷移させる。
-    const auto& boss = scenario.enemies.front();
+    const auto& boss = game.enemies.front();
     Shot finalShot;
     finalShot.p = boss.p + Vec{-64, 0};
     finalShot.previous = finalShot.p;
     finalShot.damage = boss.hp;
-    scenario.shots.push_back(finalShot);
-    for (int i = 0; i < 120 && scenario.phase == Phase::Playing; ++i)
-        scenario.update(1.f / 60.f, {});
+    game.shots.push_back(finalShot);
+    for (int i = 0; i < 120 && game.phase == Phase::Playing; ++i)
+        game.update(1.f / 60.f, {});
 
-    return scenario.phase == Phase::Clear
-        && scenario.profile.stage == 2
-        && smokeCapture(renderer, scenario, L"smoke-clear.png");
+    return game.phase == Phase::Clear
+        && game.profile.stage == 2
+        && smokeCapture(renderer, game, L"smoke-clear.png");
 }
 
 } // namespace boa

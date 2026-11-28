@@ -173,7 +173,12 @@ void drawGimmick(const Game& g) {
 }
 
 void drawShot(const Shot& shot) {
-    if (shot.kind == Action::Grenade) {
+    if (shot.kind == ShotKind::Normal) {
+        line(shot.p.x - 14, shot.p.y, shot.p.x, shot.p.y, White, 3);
+        circle(shot.p, 3, Gold);
+        return;
+    }
+    if (shot.kind == ShotKind::Grenade) {
         line(shot.p.x - 20, shot.p.y, shot.p.x, shot.p.y, Red, 3);
         circle(shot.p, shot.radius + 3, Gold, false);
         circle(shot.p, shot.radius, Red);
@@ -339,7 +344,7 @@ void Renderer::drawHud(const Game& g) const {
             898, 51, 352, g.absorbCooldownTotal - g.absorbCooldown,
             g.absorbCooldownTotal, Gold);
     } else {
-        text(898, 21, L"吸収可能  [Space]", Cyan, fontSmall);
+        text(898, 21, L"吸収可能  [右クリック]", Cyan, fontSmall);
         meter(898, 51, 352, 1, 1, Cyan);
     }
     if (g.onParadeTime > 0) {
@@ -348,19 +353,19 @@ void Renderer::drawHud(const Game& g) const {
 
     box(0, 652, 1280, 68, Ink);
     line(26, 652, 1254, 652, Rule);
-    text(28, 663, L"WASD / 矢印  移動   Space  長押し吸収", White, fontSmall);
-    text(28, 688, L"Enter  選択中のアクション   /   P  一時停止", Muted, fontSmall);
+    text(28, 656, L"左クリック  射撃  /  右クリック  吸収", White, fontSmall);
+    text(28, 676, L"ホイール  選択  /  Space  発動", White, fontSmall);
+    text(28, 696, L"WASD / 矢印  移動  /  P  一時停止", Muted, fontSmall);
 
-    constexpr Action actions[] = {Action::Charge, Action::Grenade, Action::Barrier};
-    const wchar_t* labels[] = {L"J   チャージ", L"K   グレネード", L"L   バリア"};
+    const wchar_t* labels[] = {L"チャージ", L"グレネード", L"バリア"};
     const std::wstring notes[] = {
         L"長押し → 離す",
         number(GrenadeCost) + L" 消費",
         L"長押し " + number(BarrierRate) + L" / 秒"
     };
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < static_cast<int>(ActionOrder.size()); ++i) {
         const int x = 355 + i * 163;
-        const bool selected = g.selected == actions[i];
+        const bool selected = g.selected == ActionOrder[i];
         box(x, 663, 149, 47, selected ? Track : Ink);
         box(x, 663, 149, 47, selected ? Gold : Rule, false);
         text(x + 10, 665, labels[i], selected ? Gold : White, fontSmall);
@@ -445,7 +450,7 @@ void Renderer::drawGame(const Game& g) const {
         const float progress = clamp(g.clock / g.bossAt(), 0, 1);
         box(28, 104, static_cast<int>(1225 * progress), 2, Cyan);
         if (g.clock < 4)
-            centered(144, L"青い弾をSpaceで吸収し、たまったエネルギーをEnterで使おう", Cyan, fontSmall);
+            centered(144, L"青い弾を右クリックで吸収。ホイールで技を選び、Spaceで発動", Cyan, fontSmall);
         if (g.clock > g.bossAt() - 3)
             centered(300, L"WARNING  /  大型機接近", Red, fontTitle);
     }
@@ -487,7 +492,8 @@ void Renderer::title(const Game& g, float time) const {
     text(78, 141, L"BOASHOT", White, fontHero);
     text(85, 250, L"ボアショット", Muted, fontTitle);
     text(85, 330, L"敵の猛攻を、自分の弾薬に。", White, fontTitle);
-    text(85, 397, L"Spaceで吸収し、J / K / Lで使うアクションを選択。", Muted);
+    text(85, 385, L"左クリックで射撃、右クリックで吸収。", Muted);
+    text(85, 416, L"ホイールでアクションを選び、Spaceで発動。", Muted);
     text(85, 454, L"Enter  出撃   /   STAGE " + std::to_wstring(g.profile.stage), Gold, fontTitle);
     text(85, 517, L"Esc  終了", Muted, fontSmall);
     ship({982, 364}, time, true, 4);

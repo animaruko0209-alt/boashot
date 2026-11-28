@@ -40,6 +40,13 @@ float shotContact(const Shot& shot, const Enemy& enemy, float radius) {
 
 } // namespace
 
+Action cycleAction(Action selected, int steps) {
+    constexpr int count = static_cast<int>(ActionOrder.size());
+    const auto position = std::find(ActionOrder.begin(), ActionOrder.end(), selected);
+    const int index = static_cast<int>(position - ActionOrder.begin());
+    return ActionOrder[(index + steps % count + count) % count];
+}
+
 bool Enemy::absorbingShots() const {
     float cycle = std::fmod(age, 4.4f);
     return kind == EnemyKind::Gabu && cycle >= 1.6f && cycle < 2.8f;
@@ -101,6 +108,7 @@ void Game::start() {
     absorbTime = absorbCooldown = absorbCooldownTotal = onParadeTime = 0;
     clearDelay = -1;
     nextHazard = HazardStart;
+    normalShotCooldown = 0;
     wave = 0;
     nextId = 1;
     randomState = 0xB0A501u;
@@ -199,7 +207,7 @@ void Game::controls(const Input& input) {
         barrierActive = false;
     }
 
-    // 同時に押された場合は、実行できるEnterのアクションが吸収に優先する。
+    // 同時に押された場合は、実行できるSpaceのアクションが吸収に優先する。
     if (!input.actionPress) return;
 
     switch (selected) {
@@ -222,6 +230,17 @@ void Game::controls(const Input& input) {
         }
         break;
     }
+}
+
+void Game::launchNormalShot() {
+    // 攻撃の起点を作れるよう、エネルギーを消費せず前方に小さな弾を撃つ。
+    Shot shot;
+    shot.kind = ShotKind::Normal;
+    shot.p = shot.previous = player + Vec{25, 0};
+    shot.damage = NormalShotDamage * (1 + .08f * (level - 1));
+    shot.remainingRange = Width;
+    shots.push_back(shot);
+    normalShotCooldown = NormalShotInterval;
 }
 
 void Game::launchCharge() {
@@ -248,7 +267,7 @@ void Game::launchCharge() {
 
 void Game::launchGrenade() {
     Shot shot;
-    shot.kind = Action::Grenade;
+    shot.kind = ShotKind::Grenade;
     shot.p = shot.previous = player + Vec{25, 0};
     shot.damage = 48.f * (1 + .08f * (level - 1));
     shot.radius = 9;
@@ -305,6 +324,9 @@ void Game::updateCombat(float dt, const Input& input) {
 
     // 移動後の位置でそのフレームの入力を処理し、発射・吸収の判定へ進む。
     controls(input);
+    normalShotCooldown = std::max(0.f, normalShotCooldown - dt);
+    if (input.normalShotHeld && normalShotCooldown <= 0)
+        launchNormalShot();
 
     if (clock >= 1.5f + wave * 4.2f && clock < bossAt() - 4) spawnWave();
     if (!bossSpawned && clock >= bossAt()) {
@@ -368,22 +390,31 @@ void Game::updateWeapons(float dt) {
     for (auto& shot : shots) {
         shot.previous = shot.p;
 
-        if (shot.kind == Action::Grenade) {
+        if (shot.kind != ShotKind::Charge) {
             float travel = std::min(shot.remainingRange, shot.speed * dt);
             shot.p.x += travel;
             shot.remainingRange -= travel;
 
-            // グレネードは進行方向で最初に触れた敵か、射程の端で爆発する。
+            // 通常弾とグレネードは、敵の登録順に関係なく最初の接触位置で止まる。
             float impactX = shot.p.x + 1;
-            for (const auto& enemy : enemies) {
+            Enemy* target = nullptr;
+            for (auto& enemy : enemies) {
                 if (!enemy.alive) continue;
-                impactX = std::min(impactX, shotContact(shot, enemy, enemyRadius(enemy.kind) + shot.radius));
+                const float contact = shotContact(shot, enemy, enemyRadius(enemy.kind) + shot.radius);
+                if (contact < impactX) {
+                    impactX = contact;
+                    target = &enemy;
+                }
             }
 
             if (impactX <= shot.p.x || shot.remainingRange <= 0 || shot.p.x >= Width) {
                 shot.p.x = std::min({impactX, shot.p.x, Width});
                 shot.alive = false;
-                explode(shot.p, shot.damage);
+                if (shot.kind == ShotKind::Grenade) {
+                    explode(shot.p, shot.damage);
+                } else if (target && impactX <= shot.p.x) {
+                    damageEnemy(*target, shot.damage, 1);
+                }
             }
         } else {
             shot.p.x += shot.speed * dt;

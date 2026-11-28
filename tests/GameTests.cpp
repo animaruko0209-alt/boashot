@@ -77,7 +77,7 @@ Shot incomingShot(Vec target, float damage) {
     // 初期位置を標的の手前に置き、次のフレームで衝突させる。
     Shot s;
     s.p = s.previous = target - Vec{15, 0};
-    s.kind = Action::Charge;
+    s.kind = ShotKind::Charge;
     s.speed = 1000;
     s.damage = damage;
     return s;
@@ -209,7 +209,7 @@ void chargeTests() {
     advance(game, .4f);
     float smallCharge = game.charge;
     releaseAction(game);
-    check(game.shots.size() == 1 && game.shots.front().kind == Action::Charge,
+    check(game.shots.size() == 1 && game.shots.front().kind == ShotKind::Charge,
           "sufficient charge launches on Enter release");
     check(near(game.energy, energy - smallCharge) && near(game.levelXp, smallCharge),
           "released charge counts as actual energy spent");
@@ -284,7 +284,7 @@ void grenadeTests() {
     int distantId = game.enemies[2].id;
 
     pressAction(game, Action::Grenade);
-    check(game.shots.size() == 1 && game.shots.front().kind == Action::Grenade,
+    check(game.shots.size() == 1 && game.shots.front().kind == ShotKind::Grenade,
           "Enter press fires a grenade");
     check(near(game.energy, energy - GrenadeCost), "grenade consumes its cost once at launch");
 
@@ -526,6 +526,50 @@ void stageTests() {
     }
 }
 
+void wheelSelectionTests() {
+    check(cycleAction(Action::Charge, 1) == Action::Grenade &&
+          cycleAction(Action::Grenade, 1) == Action::Barrier &&
+          cycleAction(Action::Barrier, 1) == Action::Charge,
+          "scrolling forward cycles through the three actions");
+    check(cycleAction(Action::Charge, -1) == Action::Barrier,
+          "scrolling backward wraps to the last action");
+    check(cycleAction(Action::Charge, 5) == Action::Barrier &&
+          cycleAction(Action::Barrier, -5) == Action::Charge,
+          "multi-step wheel movement preserves direction and detent count");
+}
+
+void normalShotTests() {
+    Game game;
+    game.start();
+    game.energy = 0;
+    Input fire;
+    fire.normalShotHeld = true;
+
+    game.update(Frame, fire);
+    check(game.shots.size() == 1 && game.shots.front().kind == ShotKind::Normal &&
+          near(game.energy, 0) && near(game.levelXp, 0),
+          "normal shot can fire immediately without energy or spending XP");
+    for (int i = 0; i < 6; ++i)
+        game.update(Frame, fire);
+    check(game.shots.size() == 1, "holding fire respects the normal shot cooldown");
+    for (int i = 0; i < 17; ++i)
+        game.update(Frame, fire);
+    check(game.shots.size() == 2, "normal shot repeats while the button is held");
+    advance(game, .35f);
+    check(game.shots.size() == 2, "releasing the button stops normal autofire");
+
+    game.start();
+    // 遠い敵を先に登録し、弾が登録順ではなく手前の敵で止まるかを確認する。
+    game.spawnEnemy(EnemyKind::Scout, {250, 380});
+    game.spawnEnemy(EnemyKind::Scout, {232, 380});
+    game.update(.05f, fire);
+    const auto& far = game.enemies.front();
+    const auto& nearEnemy = game.enemies.back();
+    check(near(far.hp, far.maxHp) && near(nearEnemy.hp, nearEnemy.maxHp - NormalShotDamage) &&
+          game.shots.empty() && game.explosions.empty(),
+          "normal shot damages only the first enemy and does not explode");
+}
+
 void gimmickTests() {
     Game game;
 
@@ -588,6 +632,8 @@ int main() {
         skillTests();
         progressionTests();
         stageTests();
+        wheelSelectionTests();
+        normalShotTests();
         gimmickTests();
     } catch (const std::exception& error) {
         std::cerr << "FAIL: " << error.what() << '\n';

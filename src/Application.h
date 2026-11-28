@@ -20,15 +20,16 @@ private:
 
     std::array<char, 256> keys{};
     std::array<char, 256> previousKeys{};
+    int previousMouseButtons = 0;
 
     void play();
-    bool updateFrame(float dt);
+    bool updateFrame(float dt, int mouseButtons, int wheelSteps);
     bool pressed(int key) const;
     bool released(int key) const;
-    Input readCombatInput() const;
+    Input readCombatInput(int mouseButtons, int wheelSteps) const;
 
     // 固定入力で各場面を描く。通常プレイ用のセーブは読み書きしない。
-    bool runSmoke() const;
+    bool runSmoke();
 };
 
 } // namespace boa

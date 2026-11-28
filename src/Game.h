@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <optional>
@@ -14,6 +15,7 @@ constexpr float Pi = 3.14159265f;
 
 constexpr float AbsorbDuration = 2.4f, CooldownRatio = .9f;
 constexpr float MinCharge = 8.f, GrenadeCost = 16.f, BarrierRate = 14.f;
+constexpr float NormalShotInterval = .28f, NormalShotDamage = 4.f;
 constexpr float ExplosionRadius = 110.f, ExplosionDuration = .42f;
 constexpr float ParadeCost = 20.f, ParadeDuration = 6.f, TerrainRadius = 94.f;
 constexpr int MaxLevel = 10;
@@ -49,6 +51,16 @@ enum class Action {
     Barrier
 };
 
+// ホイールの選択順と、HUDに並べる順番をそろえる。
+inline constexpr std::array ActionOrder{Action::Charge, Action::Grenade, Action::Barrier};
+Action cycleAction(Action selected, int steps);
+
+enum class ShotKind {
+    Charge,
+    Grenade,
+    Normal
+};
+
 enum class EnemyKind {
     Scout,
     Heavy,
@@ -77,6 +89,7 @@ struct Input {
     // キーを押したフレームと離したフレームだけ、それぞれのフラグを立てる。
     bool absorbPress = false, absorbRelease = false;
     bool actionPress = false, actionRelease = false, skillPress = false;
+    bool normalShotHeld = false;
 };
 
 struct Bullet {
@@ -88,7 +101,7 @@ struct Bullet {
 struct Shot {
     Vec p, previous;
     float damage = 0, radius = 4, speed = 850, remainingRange = 800;
-    Action kind = Action::Charge;
+    ShotKind kind = ShotKind::Charge;
     bool alive = true;
 
     // 貫通弾が同じ敵に次のフレームでも重なった場合の二重ヒットを防ぐ。
@@ -178,6 +191,7 @@ public:
 private:
     uint32_t randomState = 0xB0A501u;
     float nextHazard = 0;
+    float normalShotCooldown = 0;
 
     float random();
     void cancelCharge();
@@ -191,6 +205,7 @@ private:
     void removeExpiredObjects();
 
     void controls(const Input& input);
+    void launchNormalShot();
     void launchCharge();
     void launchGrenade();
     void updateBullets(float dt);

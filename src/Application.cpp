@@ -56,6 +56,9 @@ void Application::play() {
         then = now;
         menuTime += dt;
         GetHitKeyStateAll(keys.data());
+        const int mouseButtons = std::max(0, GetMouseInput());
+        // 毎フレーム読み取ってカウンターをリセットし、ポーズ中の回転も持ち越さない。
+        int wheelSteps = GetMouseWheelRotVol();
 
         if (!GetActiveFlag()) {
             // フォーカスを失ったらアクションを終了し、戦闘を一時停止する。
@@ -68,25 +71,28 @@ void Application::play() {
             continue;
         }
         if (!focused) {
-            // 復帰時のキー状態を基準にし、押し直したときに押下を検出する。
+            // フォーカス復帰時に、押しっぱなしを新たな押下として扱わない。
             previousKeys = keys;
+            previousMouseButtons = mouseButtons;
+            wheelSteps = 0;
             focused = true;
         }
 
-        running = updateFrame(dt);
+        running = updateFrame(dt, mouseButtons, wheelSteps);
         renderer.drawScene(game, menuTime, profileStore.failed());
         previousKeys = keys;
+        previousMouseButtons = mouseButtons;
         ScreenFlip();
         WaitTimer(1);
     }
 }
 
-bool Application::updateFrame(float dt) {
+bool Application::updateFrame(float dt, int mouseButtons, int wheelSteps) {
     const bool enter = pressed(KEY_INPUT_RETURN);
     const bool escape = pressed(KEY_INPUT_ESCAPE);
     const bool pause = pressed(KEY_INPUT_P);
 
-    // Enterの用途を画面ごとに分け、出撃や再開と同じフレームで攻撃しないようにする。
+    // 出撃や再開のフレームは画面遷移だけを処理し、次のフレームから戦闘入力を受け取る。
     switch (game.phase) {
     case Phase::Title:
         if (escape)
@@ -112,7 +118,7 @@ bool Application::updateFrame(float dt) {
             game.stopActions();
             game.phase = Phase::Paused;
         } else {
-            game.update(dt, readCombatInput());
+            game.update(dt, readCombatInput(mouseButtons, wheelSteps));
             // 戦闘からクリアに切り替わったフレームで、次の出撃先を保存する。
             if (game.phase == Phase::Clear)
                 profileStore.save(game.profile);
@@ -131,7 +137,7 @@ bool Application::released(int key) const {
     return !keys[key] && previousKeys[key];
 }
 
-Input Application::readCombatInput() const {
+Input Application::readCombatInput(int mouseButtons, int wheelSteps) const {
     Input input;
     // 移動は押している間、アクションは押した瞬間と離した瞬間を Game に渡す。
     input.move = {
@@ -143,18 +149,16 @@ Input Application::readCombatInput() const {
             (keys[KEY_INPUT_W] || keys[KEY_INPUT_UP]))
     };
 
-    // 同じフレームに複数の選択キーを押した場合は、後のキーを優先する。
-    if (pressed(KEY_INPUT_J))
-        input.selection = Action::Charge;
-    if (pressed(KEY_INPUT_K))
-        input.selection = Action::Grenade;
-    if (pressed(KEY_INPUT_L))
-        input.selection = Action::Barrier;
+    if (wheelSteps != 0)
+        input.selection = cycleAction(game.selected, wheelSteps);
 
-    input.absorbPress = pressed(KEY_INPUT_SPACE);
-    input.absorbRelease = released(KEY_INPUT_SPACE);
-    input.actionPress = pressed(KEY_INPUT_RETURN);
-    input.actionRelease = released(KEY_INPUT_RETURN);
+    const bool rightHeld = (mouseButtons & MOUSE_INPUT_RIGHT) != 0;
+    const bool rightWasHeld = (previousMouseButtons & MOUSE_INPUT_RIGHT) != 0;
+    input.absorbPress = rightHeld && !rightWasHeld;
+    input.absorbRelease = !rightHeld && rightWasHeld;
+    input.normalShotHeld = (mouseButtons & MOUSE_INPUT_LEFT) != 0;
+    input.actionPress = pressed(KEY_INPUT_SPACE);
+    input.actionRelease = released(KEY_INPUT_SPACE);
     input.skillPress = pressed(KEY_INPUT_I);
     return input;
 }

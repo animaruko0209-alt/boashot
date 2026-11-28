@@ -380,7 +380,7 @@ void Game::removeExpiredObjects() {
 
 void Game::updateWeapons(float dt) {
     if (charging) {
-        float reserve = std::min(energy, 28.f * dt);
+        float reserve = std::min(energy, 14.f * dt);
         energy -= reserve;
         charge += reserve;
     }

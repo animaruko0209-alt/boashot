@@ -14,7 +14,8 @@ constexpr float Width = 1280, Height = 720, Top = 110, Bottom = 652;
 constexpr float Pi = 3.14159265f;
 
 constexpr float AbsorbDuration = 2.4f, CooldownRatio = .9f;
-constexpr float MinCharge = 8.f, GrenadeCost = 16.f, BarrierRate = 14.f;
+// チャージ・グレネード・バリアの消費量
+constexpr float MinCharge = 8.f, GrenadeCost = 50.f, BarrierRate = 14.f;
 constexpr float NormalShotInterval = .28f, NormalShotDamage = 4.f;
 constexpr float ExplosionRadius = 110.f, ExplosionDuration = .42f;
 constexpr float ParadeCost = 20.f, ParadeDuration = 6.f, TerrainRadius = 94.f;
@@ -95,7 +96,8 @@ struct Input {
 struct Bullet {
     Vec p, velocity;
     bool rock = false, alive = true, crossfire = false;
-    float energy = 6, damage = 14, radius = 7;
+    // 吸収量
+    float energy = 1.5f, damage = 14, radius = 7;
 };
 
 struct Shot {

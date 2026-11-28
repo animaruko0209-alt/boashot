@@ -266,62 +266,81 @@ void Game::update(float dt, const Input& input) {
     shake = std::max(0.f, shake - dt);
     flash = std::max(0.f, flash - dt);
 
-    if (clearDelay < 0) {
-        absorbCooldown = std::max(0.f, absorbCooldown - dt);
-        onParadeTime = std::max(0.f, onParadeTime - dt);
+    if (clearDelay < 0)
+        updateCombat(dt, input);
 
-        Vec move = input.move;
-        if (length(move) > 1) move = unit(move);
-        player = player + move * (310 * dt);
+    updateEffects(dt);
+    removeExpiredObjects();
 
-        if (activeGimmick() == Gimmick::Gravity) {
-            Vec pull = hazardPosition() - player;
-            player = player + pull * (dt * .36f);
-        }
-        if (activeGimmick() == Gimmick::Terrain) {
-            Vec offset = player - hazardPosition();
-            if (length(offset) < TerrainRadius + ShipRadius) {
-                player = hazardPosition() + unit(offset) * (TerrainRadius + ShipRadius);
-            }
-        }
+    if (hp <= 0) {
+        phase = Phase::GameOver;
+        stopActions();
+    } else if (clearDelay >= 0) {
+        clearDelay -= dt;
+        if (clearDelay <= 0) complete();
+    }
+}
 
-        player.x = clamp(player.x, 32, Width - 50);
-        player.y = clamp(player.y, Top + 24, Bottom - 24);
+void Game::updateCombat(float dt, const Input& input) {
+    absorbCooldown = std::max(0.f, absorbCooldown - dt);
+    onParadeTime = std::max(0.f, onParadeTime - dt);
 
-        controls(input);
+    Vec move = input.move;
+    if (length(move) > 1) move = unit(move);
+    player = player + move * (310 * dt);
 
-        if (clock >= 1.5f + wave * 4.2f && clock < bossAt() - 4) spawnWave();
-        if (!bossSpawned && clock >= bossAt()) {
-            spawnEnemy(EnemyKind::Boss, {1150, 370});
-            bossSpawned = true;
-        }
-
-        // 自機の弾でボスを倒した場合は、その時点で敵の更新を打ち切る。
-        updateWeapons(dt);
-        if (clearDelay < 0) {
-            updateEnemies(dt);
-            updateGimmick();
-            updateBullets(dt);
-            updateWrecks(dt);
-        }
-
-        // 吸収判定を済ませたあとで、そのフレームの継続時間を加える。
-        if (absorbing) {
-            absorbTime = std::min(AbsorbDuration, absorbTime + dt);
-            if (AbsorbDuration - absorbTime < .0001f) {
-                absorbTime = AbsorbDuration;
-                endAbsorb();
-            }
+    if (activeGimmick() == Gimmick::Gravity) {
+        Vec pull = hazardPosition() - player;
+        player = player + pull * (dt * .36f);
+    }
+    if (activeGimmick() == Gimmick::Terrain) {
+        Vec offset = player - hazardPosition();
+        if (length(offset) < TerrainRadius + ShipRadius) {
+            player = hazardPosition() + unit(offset) * (TerrainRadius + ShipRadius);
         }
     }
 
+    player.x = clamp(player.x, 32, Width - 50);
+    player.y = clamp(player.y, Top + 24, Bottom - 24);
+
+    // 移動後の位置でそのフレームの入力を処理し、発射・吸収の判定へ進む。
+    controls(input);
+
+    if (clock >= 1.5f + wave * 4.2f && clock < bossAt() - 4) spawnWave();
+    if (!bossSpawned && clock >= bossAt()) {
+        spawnEnemy(EnemyKind::Boss, {1150, 370});
+        bossSpawned = true;
+    }
+
+    // 自機の弾でボスを倒した場合は、その時点で敵の更新を打ち切る。
+    updateWeapons(dt);
+    if (clearDelay < 0) {
+        updateEnemies(dt);
+        updateGimmick();
+        updateBullets(dt);
+        updateWrecks(dt);
+    }
+
+    // 吸収判定を済ませたあとで、そのフレームの継続時間を加える。
+    if (absorbing) {
+        absorbTime = std::min(AbsorbDuration, absorbTime + dt);
+        if (AbsorbDuration - absorbTime < .0001f) {
+            absorbTime = AbsorbDuration;
+            endAbsorb();
+        }
+    }
+}
+
+void Game::updateEffects(float dt) {
     // ボス撃破後も、クリア画面に切り替わるまで演出を進める。
     for (auto& p : particles) {
         p.p = p.p + p.velocity * dt;
         p.life -= dt;
     }
     for (auto& explosion : explosions) explosion.life -= dt;
+}
 
+void Game::removeExpiredObjects() {
     // 当たり判定の走査がすべて終わってから、消滅した対象を取り除く。
     particles.erase(std::remove_if(particles.begin(), particles.end(),
         [](const Particle& p) { return p.life <= 0; }), particles.end());
@@ -335,14 +354,6 @@ void Game::update(float dt, const Input& input) {
         [](const Enemy& e) { return !e.alive; }), enemies.end());
     wrecks.erase(std::remove_if(wrecks.begin(), wrecks.end(),
         [](const Wreck& w) { return !w.alive; }), wrecks.end());
-
-    if (hp <= 0) {
-        phase = Phase::GameOver;
-        stopActions();
-    } else if (clearDelay >= 0) {
-        clearDelay -= dt;
-        if (clearDelay <= 0) complete();
-    }
 }
 
 void Game::updateWeapons(float dt) {

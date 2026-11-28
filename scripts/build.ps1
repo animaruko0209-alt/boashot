@@ -11,7 +11,6 @@ if ($Tests) {
     & (Join-Path $repo "tests/bin/$Configuration/boashot-tests.exe")
     if ($LASTEXITCODE -ne 0) { throw 'Tests failed.' }
 } else {
-    if (!(Test-Path (Join-Path $repo 'dependencies/DxLib/DxLib.h'))) { & "$PSScriptRoot/setup-dxlib.ps1" }
     & $msbuild (Join-Path $repo 'boashot.sln') /m /nologo /v:minimal "/p:Configuration=$Configuration" /p:Platform=x64
     if ($LASTEXITCODE -ne 0) { throw 'Game build failed.' }
 }

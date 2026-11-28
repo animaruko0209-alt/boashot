@@ -126,16 +126,19 @@ struct Stats {
     float energyGained = 0, biggestCharge = 0;
 };
 
+// 1回の出撃とステージ進行を管理する。入力を受け取り、DxLib に依存せずに戦闘を進める。
 class Game {
 public:
     Profile profile;
     Phase phase = Phase::Title;
     Action selected = Action::Charge;
 
+    // 自機の状態と、戦闘・被弾・ステージクリアの経過時間。
     Vec player{170, 380};
     float hp = 100, energy = 35, charge = 0, clock = 0, invulnerable = 0;
     float shake = 0, flash = 0, clearDelay = -1;
 
+    // アクションの継続時間と、描画にも使う戦闘中のフラグ。
     float absorbTime = 0, absorbCooldown = 0, absorbCooldownTotal = 0, onParadeTime = 0;
     bool absorbing = false, charging = false, barrierActive = false,
         bossSpawned = false, skillUnlocked = false;
@@ -144,6 +147,7 @@ public:
     float levelXp = 0;
     Stats stats;
 
+    // 戦闘中の物体とエフェクト。描画は更新が終わった時点の内容を参照する。
     std::vector<Bullet> bullets;
     std::vector<Shot> shots;
     std::vector<Enemy> enemies;
@@ -181,6 +185,10 @@ private:
     void addLevelXp(float amount);
     void gainEnergy(float amount);
     bool spendEnergy(float amount);
+
+    void updateCombat(float dt, const Input& input);
+    void updateEffects(float dt);
+    void removeExpiredObjects();
 
     void controls(const Input& input);
     void launchCharge();

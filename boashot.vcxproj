@@ -128,7 +128,8 @@
   </ItemDefinitionGroup>
 
   <PropertyGroup>
-    <DxLibDir Condition="'$(DxLibDir)'==''">$(ProjectDir)dependencies\DxLib</DxLibDir>
+    <DefaultDxLibDir>$(ProjectDir)dependencies\DxLib</DefaultDxLibDir>
+    <DxLibDir Condition="'$(DxLibDir)'==''">$(DefaultDxLibDir)</DxLibDir>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
@@ -144,12 +145,21 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="src\Application.cpp" />
     <ClCompile Include="src\Main.cpp" />
     <ClCompile Include="src\Game.cpp" />
+    <ClCompile Include="src\ProfileStore.cpp" />
+    <ClCompile Include="src\Renderer.cpp" />
+    <ClCompile Include="src\SmokeTest.cpp" />
+    <ClInclude Include="src\Application.h" />
     <ClInclude Include="src\Game.h" />
+    <ClInclude Include="src\ProfileStore.h" />
+    <ClInclude Include="src\Renderer.h" />
   </ItemGroup>
-  <Target Name="CheckDxLib" BeforeTargets="PrepareForBuild" Condition="!Exists('$(DxLibDir)\DxLib.h')">
-    <Error Text="DxLib SDK missing. Run: powershell -ExecutionPolicy Bypass -File scripts\setup-dxlib.ps1" />
+  <Target Name="RestoreDxLib" BeforeTargets="PrepareForBuild" Condition="'$(DesignTimeBuild)'!='true'">
+    <Exec Condition="'$(DxLibDir)'=='$(DefaultDxLibDir)' And (!Exists('$(DxLibDir)\DxLib.h') Or !Exists('$(DxLibDir)\dxlicense.html'))"
+          Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)scripts\setup-dxlib.ps1&quot; -Restore" />
+    <Error Condition="!Exists('$(DxLibDir)\DxLib.h')" Text="DxLib.h was not found in DxLibDir: $(DxLibDir)" />
   </Target>
   <Target Name="CopyNotices" AfterTargets="Build">
     <Copy SourceFiles="$(DxLibDir)\dxlicense.html" DestinationFolder="$(OutDir)" Condition="Exists('$(DxLibDir)\dxlicense.html')" />

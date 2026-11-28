@@ -49,9 +49,6 @@
 Visual Studio 2022の「C++によるデスクトップ開発」とWindows SDKが必要です。
 
 ```powershell
-# 初回のみ：公式DxLib SDKをダウンロード・展開
-powershell -ExecutionPolicy Bypass -File scripts/setup-dxlib.ps1
-
 # ゲームのReleaseビルド
 powershell -ExecutionPolicy Bypass -File scripts/build.ps1 -Configuration Release
 
@@ -59,7 +56,7 @@ powershell -ExecutionPolicy Bypass -File scripts/build.ps1 -Configuration Releas
 powershell -ExecutionPolicy Bypass -File scripts/build.ps1 -Tests
 ```
 
-または `boashot.sln` を開き、x64 / Releaseを選択してビルドします。Win32構成もSDKのライブラリを参照しますが、検証対象はx64です。既存SDKを利用する場合は `DxLibDir` をヘッダー・LIBのあるフォルダに指定できます。
+または `boashot.sln` を Visual Studio で開き、Debug | x64 を選んで F5 を押します。Visual Studio と PowerShell のどちらでも、初回のゲームビルド時に公式の DxLib 3.25a を自動取得します。初回の取得にはインターネット接続が必要です。以降は取得済みの SDK を再利用します。既存 SDK を利用する場合は `DxLibDir` をヘッダー・LIB のあるフォルダに指定できます。
 
 SDKはGit管理対象外の `dependencies/DxLib` に配置します。セットアップ時に公式ヘッダーのCP932をローカルコピー内でUTF-8に変換し、プロジェクトの `/utf-8` 設定と合わせています。
 
@@ -67,7 +64,7 @@ SDKはGit管理対象外の `dependencies/DxLib` に配置します。セット�
 - [公式Visual Studio 2022設定手順](https://dxlib.xsrv.jp/use/dxuse_vscom2022.html)
 - 使用SDK：3.25a（公式アーカイブSHA256：`DB9E6138C1665C9D9081DD04019219F332A1185448162FDBBC6F8182B9E4A847`）
 
-ビルド時にSDK同梱の `dxlicense.html` を実行ファイルの隣にコピーします。実行ファイルを渡す場合は、この著作権表示も同梱してください。
+遊ぶだけの PC では DxLib SDK の準備は不要です。配布時は、Release ビルドで生成した `boashot.exe` と、同じフォルダにコピーされる著作権表示 `dxlicense.html` を一緒に渡してください。
 
 ## 検証
 
@@ -80,5 +77,11 @@ SDKはGit管理対象外の `dependencies/DxLib` に配置します。セット�
 
 起動したフォルダに、タイトル、吸収、クールタイム、チャージ、グレネード、スキル、ボス、クリアの画面を出力します。
 
-- `src/Game.h` / `src/Game.cpp` — ゲームロジック
-- `src/Main.cpp` — DxLib描画、キー入力、画面遷移、保存
+## コードの構成
+
+- `src/Main.cpp` — Windows の起動入口
+- `src/Application.h` / `src/Application.cpp` — DxLib の起動・終了、ゲームループ、入力、画面遷移
+- `src/Game.h` / `src/Game.cpp` — 出撃中の状態、戦闘ルール、ステージ進行
+- `src/Renderer.h` / `src/Renderer.cpp` — タイトル、戦闘画面、HUD の描画
+- `src/ProfileStore.h` / `src/ProfileStore.cpp` — ステージ進行データの読み書き
+- `src/SmokeTest.cpp` — `--smoke` の自動入力と画面出力

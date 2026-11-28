@@ -40,8 +40,16 @@ bool Application::runSmoke() {
         !smokeCapture(renderer, game, L"smoke-absorb.png"))
         return false;
 
+    // 吸収開始の画面に続けて、残り半分と終了直前の色を記録する。
+    for (int i = 0; i < 71; ++i)
+        game.update(1.f / 60.f, {});
+    if (!game.absorbing || !smokeCapture(renderer, game, L"smoke-absorb-mid.png"))
+        return false;
     for (int i = 0; i < 60; ++i)
         game.update(1.f / 60.f, {});
+    if (!game.absorbing || !smokeCapture(renderer, game, L"smoke-absorb-low.png"))
+        return false;
+
     previousMouseButtons = MOUSE_INPUT_RIGHT;
     game.update(1.f / 60.f, readCombatInput(0, 0));
     previousMouseButtons = 0;

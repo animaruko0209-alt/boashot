@@ -5,11 +5,37 @@
 namespace boa {
 namespace {
 
+struct Rgb {
+    int red, green, blue;
+
+    unsigned color() const { return GetColor(red, green, blue); }
+};
+
+constexpr Rgb CyanRgb{77, 227, 233}, GoldRgb{255, 198, 98};
+constexpr Rgb RedRgb{255, 100, 116}, VioletRgb{174, 166, 255};
 const unsigned Ink = GetColor(7, 13, 27), White = GetColor(228, 241, 247);
-const unsigned Cyan = GetColor(77, 227, 233), Gold = GetColor(255, 198, 98);
-const unsigned Red = GetColor(255, 100, 116), Muted = GetColor(120, 148, 169);
-const unsigned Violet = GetColor(174, 166, 255), Green = GetColor(132, 233, 169);
+const unsigned Cyan = CyanRgb.color(), Gold = GoldRgb.color();
+const unsigned Red = RedRgb.color(), Muted = GetColor(120, 148, 169);
+const unsigned Violet = VioletRgb.color(), Green = GetColor(132, 233, 169);
 const unsigned Track = GetColor(30, 43, 59), Rule = GetColor(39, 62, 78);
+
+unsigned blendColor(Rgb from, Rgb to, float amount) {
+    const auto blend = [amount](int start, int end) {
+        return static_cast<int>(std::lround(start + (end - start) * amount));
+    };
+    return GetColor(blend(from.red, to.red), blend(from.green, to.green), blend(from.blue, to.blue));
+}
+
+unsigned absorbColor(const Game& g) {
+    // 通常は水色、オンパレード中は紫で始め、残り半分で黄色、約0.3秒前で赤にする。
+    constexpr float GoldAt = .5f, RedAt = .875f;
+    const float elapsed = clamp(g.absorbTime / AbsorbDuration, 0.f, RedAt);
+    if (elapsed < GoldAt) {
+        const Rgb start = g.onParadeTime > 0 ? VioletRgb : CyanRgb;
+        return blendColor(start, GoldRgb, elapsed / GoldAt);
+    }
+    return blendColor(GoldRgb, RedRgb, (elapsed - GoldAt) / (RedAt - GoldAt));
+}
 
 // DxLib の図形描画に渡す座標へ変換する。
 void box(int x, int y, int w, int h, unsigned color, bool fill = true) {
@@ -97,10 +123,10 @@ void cone(const Game& g) {
 
     constexpr int segments = 28;
     float a = g.halfAngle(), r = g.range();
-    const unsigned color = g.onParadeTime > 0 ? Violet : Cyan;
+    const unsigned color = absorbColor(g);
 
-    // 奥の背景が見える薄い塗りと、境界を示す輪郭を別々に描く。
-    SetDrawBlendMode(DX_BLENDMODE_ALPHA, 23);
+    // 敵弾を見失わないよう塗りは半透明にし、色の変化は輪郭でも分かるようにする。
+    SetDrawBlendMode(DX_BLENDMODE_ALPHA, 41);
     for (int i = 0; i < segments; ++i) {
         float angle1 = -a + 2 * a * i / segments,
               angle2 = -a + 2 * a * (i + 1) / segments;
@@ -110,19 +136,19 @@ void cone(const Game& g) {
             g.player + Vec{std::cos(angle2) * r, std::sin(angle2) * r},
             color);
     }
-    SetDrawBlendMode(DX_BLENDMODE_ALPHA, 125);
+    SetDrawBlendMode(DX_BLENDMODE_ALPHA, 190);
     for (int i = 0; i < segments; ++i) {
         float a1 = -a + 2 * a * i / segments,
               a2 = -a + 2 * a * (i + 1) / segments;
         Vec v1 = g.player + Vec{std::cos(a1) * r, std::sin(a1) * r};
         Vec v2 = g.player + Vec{std::cos(a2) * r, std::sin(a2) * r};
-        line(v1.x, v1.y, v2.x, v2.y, color);
+        line(v1.x, v1.y, v2.x, v2.y, color, 2);
     }
     for (float side : {-a, a})
         line(
             g.player.x, g.player.y,
             g.player.x + std::cos(side) * r, g.player.y + std::sin(side) * r,
-            color);
+            color, 2);
 
     SetDrawBlendMode(DX_BLENDMODE_NOBLEND, 0);
 }
@@ -336,8 +362,9 @@ void Renderer::drawHud(const Game& g) const {
     // 吸収中は残り時間、クールタイム中は再使用までの進み具合を表示する。
     if (g.absorbing) {
         const float left = AbsorbDuration - g.absorbTime;
-        text(898, 21, L"吸収中  " + seconds(left), Cyan, fontSmall);
-        meter(898, 51, 352, left, AbsorbDuration, Cyan);
+        const unsigned color = absorbColor(g);
+        text(898, 21, L"吸収中  " + seconds(left), color, fontSmall);
+        meter(898, 51, 352, left, AbsorbDuration, color);
     } else if (g.absorbCooldown > 0) {
         text(898, 21, L"吸収クールタイム  " + seconds(g.absorbCooldown), Gold, fontSmall);
         meter(
